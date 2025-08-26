@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>肥之日常</title>
+<style>
+  body { font-family: sans-serif; background-color: #f4f6f8; color: #333; margin:0; padding:0; }
+  #albumContainer {
+    max-width: 360px;
+    margin:10px auto;
+    padding:8px;
+    background:#fff;
+    border-radius:8px;
+    box-shadow:0 0 5px rgba(0,0,0,0.1);
+    text-align:center;
+  }
+  h3 { font-size:16px; margin:5px 0; }
+  select {
+    width:50%;             
+    padding:4px;
+    margin:6px auto;
+    font-size:13px;
+    border:1px solid #999;
+    border-radius:4px;
+    display:block;
+    text-align:center;
+    background:none;       
+  }
+  #itemContainer { text-align:center; min-height:200px; margin-top:5px; position:relative; overflow:hidden; }
+  #itemContainer iframe, #itemContainer img {
+    max-width:100%;
+    border-radius:4px;
+    display:block;
+    margin:0 auto;
+    opacity:0;
+    transition: opacity 0.8s ease;
+  }
+  .navBtn {
+    cursor:pointer;
+    margin:5px 10px;
+    padding:0;
+    font-size:16px;       
+    background:none;
+    border:none;
+    font-weight:normal;
+  }
+  #pageInfo { font-size:11px; color:#666; margin-top:3px; }
+  #playPauseBtn {
+    margin-top:5px;
+    font-size:12px;
+    cursor:pointer;
+    padding:2px 6px;
+    border:1px solid #999;
+    border-radius:4px;
+    background:none;
+  }
+</style>
+</head>
+<body>
+<div id="albumContainer">
+  <h3>肥之日常</h3>
+  <select id="albumSelect"></select>
+  <div id="itemContainer">載入中…</div>
+  <div style="margin-top:5px;">
+    <button class="navBtn" id="prevBtn">&lt;</button>
+    <button class="navBtn" id="nextBtn">&gt;</button>
+  </div>
+  <button id="playPauseBtn">暫停</button>
+  <div id="pageInfo"></div>
+</div>
+
+<script>
+const webAppUrl = "https://script.google.com/macros/s/AKfycbzOxpKuruGc1t5kKIE_H7cv_7Moi1d4R0n7LEasSGfHD72AJNQjw69lhbUFljgu5-85/exec"; 
+let albums = [];
+let currentAlbumIndex = 0;
+let currentItemIndex = 0;
+let autoSlideTimer = null;
+const slideInterval = 5000; // 5 秒自動切換
+let isPlaying = true;
+let isHoverPaused = false;
+
+function renderItem() {
+  const itemContainer = document.getElementById('itemContainer');
+  itemContainer.innerHTML = '';
+  if (!albums.length) return;
+  const album = albums[currentAlbumIndex];
+  if (!album.items.length) return;
+
+  const item = album.items[currentItemIndex];
+
+  let el;
+  if(item.type === 'image') {
+    el = document.createElement('img');
+    el.src = item.url;
+    el.onload = () => {
+      const ratio = el.naturalHeight / el.naturalWidth;
+      el.style.height = Math.min(400, 360 * ratio) + "px";
+      el.style.opacity = 1;
+    }
+  } else if(item.type === 'video') {
+    el = document.createElement('iframe');
+    el.src = item.url;
+    el.width = "100%";
+    el.height = Math.floor(360*9/16) + "px";
+    el.frameBorder = "0";
+    el.allow = "autoplay; encrypted-media";
+    el.onload = () => { el.style.opacity = 1; }
+  }
+  el.style.opacity = 0;
+  itemContainer.appendChild(el);
+
+  document.getElementById('pageInfo').innerText = `${currentItemIndex+1} / ${album.items.length}`;
+
+  // 自動輪播
+  if(isPlaying && !isHoverPaused) {
+    if(autoSlideTimer) clearTimeout(autoSlideTimer);
+    autoSlideTimer = setTimeout(nextItem, slideInterval);
+  }
+}
+
+// 滑鼠懸停暫停
+const itemContainer = document.getElementById('itemContainer');
+itemContainer.addEventListener('mouseenter', () => { isHoverPaused = true; if(autoSlideTimer) clearTimeout(autoSlideTimer); });
+itemContainer.addEventListener('mouseleave', () => { isHoverPaused = false; if(isPlaying) autoSlideTimer = setTimeout(nextItem, slideInterval); });
+
+function changeAlbum(index) {
+  currentAlbumIndex = index;
+  currentItemIndex = 0;
+  renderItem();
+}
+
+function nextItem() {
+  const album = albums[currentAlbumIndex];
+  if (!album.items.length) return;
+  currentItemIndex = (currentItemIndex + 1) % album.items.length;
+  renderItem();
+}
+
+function prevItem() {
+  const album = albums[currentAlbumIndex];
+  if (!album.items.length) return;
+  currentItemIndex = (currentItemIndex - 1 + album.items.length) % album.items.length;
+  renderItem();
+}
+
+function togglePlayPause() {
+  isPlaying = !isPlaying;
+  const btn = document.getElementById('playPauseBtn');
+  btn.textContent = isPlaying ? '暫停' : '播放';
+  if(isPlaying && !isHoverPaused) {
+    autoSlideTimer = setTimeout(nextItem, slideInterval);
+  } else {
+    if(autoSlideTimer) clearTimeout(autoSlideTimer);
+  }
+}
+
+fetch(webAppUrl)
+  .then(resp => resp.json())
+  .then(data => {
+    albums = data;
+    const select = document.getElementById('albumSelect');
+    albums.forEach((album, i) => {
+      const option = document.createElement('option');
+      option.value = i;
+      option.text = album.name;
+      select.appendChild(option);
+    });
+    select.addEventListener('change', e => changeAlbum(e.target.value));
+    renderItem();
+  })
+  .catch(err => {
+    document.getElementById('itemContainer').innerText = '❌ 無法載入相簿';
+    console.error(err);
+  });
+
+document.getElementById('nextBtn').addEventListener('click', () => { nextItem(); });
+document.getElementById('prevBtn').addEventListener('click', () => { prevItem(); });
+document.getElementById('playPauseBtn').addEventListener('click', togglePlayPause);
+</script>
+</body>
+</html>
